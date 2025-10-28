@@ -9,7 +9,7 @@ env:
   LOCATION: South India
   TEMPLATE-FILE: infra/webapp.bicep
   SUBSCRIPTION-ID: 81ce95b5-bb6d-4e10-8a85-2258da864517
-  WEBAPP-NAME: devops-webapp-eastus-1804426271
+  WEBAPP-NAME: devops-webapp-eastus-24087522
 
 
 jobs:
