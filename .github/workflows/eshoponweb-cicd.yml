@@ -1,6 +1,6 @@
 name: eShopOnWeb Build and Test
 
-#Triggers (uncomment line below to use it)
+# Trigger manually
 on: workflow_dispatch
 
 env:
@@ -14,36 +14,51 @@ jobs:
   buildandtest:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-    - name: Setup .NET
+    - name: Setup .NET 9 (preview)
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '9.0.x'        # <-- changed from 8.0.x to 9.0.x
+        dotnet-version: '9.0.x'
         dotnet-quality: 'preview'
 
     - name: Show dotnet info (diagnostic)
       run: dotnet --info
 
+    - name: Restore solution (diagnostic)
+      run: |
+        mkdir -p ./artifacts
+        dotnet restore ./eShopOnWeb.sln -v:d
+        dotnet list ./eShopOnWeb.sln package --include-transitive > ./artifacts/package-tree.txt || true
+        echo "Saved transitive package graph to ./artifacts/package-tree.txt"
+
+    - name: Upload package list artifact (diagnostic)
+      uses: actions/upload-artifact@v4
+      with:
+        name: package-list
+        path: ./artifacts/package-tree.txt
+
     - name: Build with dotnet
-      run: dotnet build ./eShopOnWeb.sln --configuration Release
+      run: dotnet build ./eShopOnWeb.sln --configuration Release --no-restore
 
     - name: Test with dotnet
-      run: dotnet test ./eShopOnWeb.sln --configuration Release
+      run: dotnet test ./eShopOnWeb.sln --configuration Release --no-build --logger:"trx;LogFileName=test_results.trx"
+      continue-on-error: false
 
     - name: dotnet publish
       run: |
-        dotnet publish ./src/Web/Web.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
-        cd ${{env.DOTNET_ROOT}}/myapp
+        dotnet publish ./src/Web/Web.csproj -c Release -o ${{ env.DOTNET_ROOT }}/myapp
+        cd ${{ env.DOTNET_ROOT }}/myapp
         zip -r ../app.zip .
 
     - name: Upload artifact for deployment job
       uses: actions/upload-artifact@v4
       with:
         name: .net-app
-        path: ${{env.DOTNET_ROOT}}/app.zip
+        path: ${{ env.DOTNET_ROOT }}/app.zip
 
-    - name: Upload artifact for deployment job
+    - name: Upload bicep template artifact
       uses: actions/upload-artifact@v4
       with:
         name: bicep-template
@@ -60,15 +75,18 @@ jobs:
       with:
         name: .net-app
         path: .net-app
-    - name: Download artifact from build job
+
+    - name: Download bicep template
       uses: actions/download-artifact@v4
       with:
         name: bicep-template
         path: bicep-template
+
     - name: Azure Login
       uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
+
     - name: deploy
       uses: azure/arm-deploy@v2
       with:
@@ -77,6 +95,7 @@ jobs:
         template: bicep-template/webapp.bicep
         parameters: 'webAppName=${{ env.WEBAPP-NAME }} location=${{ env.LOCATION }}'
         failOnStdErr: false
+
     - name: Publish Website to WebApp
       uses: Azure/cli@v2
       with:
